@@ -7,6 +7,7 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
+import dev.mcmcp.compat.Compat;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -25,8 +26,8 @@ public final class WorldMethods {
                 Dispatcher.empty(), params -> {
                     ClientLevel level = Game.world();
                     JsonObject out = new JsonObject();
-                    out.addProperty("dimension", level.dimension().identifier().toString());
-                    long clock = level.getOverworldClockTime();
+                    out.addProperty("dimension", Compat.dimensionId(level));
+                    long clock = Compat.dayTime(level);
                     long dayTime = Math.floorMod(clock, 24000L);
                     out.addProperty("time", clock);
                     out.addProperty("dayTime", dayTime);
@@ -40,9 +41,7 @@ public final class WorldMethods {
                     LocalPlayer player = Game.playerOrNull();
                     if (player != null) {
                         BlockPos pos = player.blockPosition();
-                        String biome = level.getBiome(pos).unwrapKey()
-                                .map(key -> key.identifier().toString()).orElse("unknown");
-                        out.addProperty("biome", biome);
+                        out.addProperty("biome", Compat.biomeId(level, pos));
                         out.add("position", Game.blockPos(pos));
                     }
                     return out;
@@ -141,8 +140,8 @@ public final class WorldMethods {
                     JsonArray array = new JsonArray();
                     for (var info : connection.getOnlinePlayers()) {
                         JsonObject json = new JsonObject();
-                        json.addProperty("name", info.getProfile().name());
-                        json.addProperty("uuid", info.getProfile().id().toString());
+                        json.addProperty("name", Compat.profileName(info.getProfile()));
+                        json.addProperty("uuid", Compat.profileId(info.getProfile()).toString());
                         json.addProperty("ping", info.getLatency());
                         json.addProperty("gameMode", info.getGameMode() == null ? "unknown" : info.getGameMode().getName());
                         var team = info.getTeam();
@@ -182,7 +181,7 @@ public final class WorldMethods {
 
         d.add("world.container", "Contents of the open container screen, or null.", "{\"title\",\"size\",\"items\":[...]}|null",
                 Dispatcher.empty(), params -> {
-                    var screen = McmcpMod.mc().screen;
+                    var screen = Compat.screen(McmcpMod.mc());
                     if (!(screen instanceof AbstractContainerScreen<?> container)) return Json.object("container", null);
                     JsonObject out = new JsonObject();
                     out.addProperty("title", container.getTitle().getString());

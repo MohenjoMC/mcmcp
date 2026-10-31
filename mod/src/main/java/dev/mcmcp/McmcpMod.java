@@ -3,15 +3,14 @@ package dev.mcmcp;
 import com.google.gson.JsonObject;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
-import net.fabricmc.fabric.api.client.command.v2.ClientCommands;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.message.v1.ClientReceiveMessageEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.ChatFormatting;
-import net.minecraft.SharedConstants;
 import net.minecraft.client.Minecraft;
+import dev.mcmcp.compat.Compat;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.slf4j.Logger;
@@ -88,29 +87,33 @@ public class McmcpMod implements ClientModInitializer {
 
     private void registerCommands() {
         ClientCommandRegistrationCallback.EVENT.register((dispatcher, access) ->
-                dispatcher.register(ClientCommands.literal("mcmcp")
-                        .executes(context -> {
-                            context.getSource().sendFeedback(Component.literal(
-                                    "[mcmcp] " + VERSION + " — 127.0.0.1:" + (server == null ? "?" : server.port())
-                                            + " — " + DISPATCHER.catalog().size() + " methods"));
-                            return 1;
-                        })
-                        .then(ClientCommands.literal("status").executes(context -> {
-                            context.getSource().sendFeedback(Component.literal(
-                                    "[mcmcp] control " + (server == null ? "stopped" : "127.0.0.1:" + server.port())
-                                            + " | player " + playerName() + " | in world " + inWorld()));
-                            return 1;
-                        }))
-                        .then(ClientCommands.literal("stop").executes(context -> {
-                            shutdown();
-                            context.getSource().sendFeedback(Component.literal("[mcmcp] control server stopped")
-                                    .withStyle(ChatFormatting.YELLOW));
-                            return 1;
-                        }))));
+                Compat.registerClientCommands(dispatcher, McmcpMod::statusLine, McmcpMod::feedback));
+    }
+
+    public static String statusLine() {
+        ControlServer running = server();
+        return "[mcmcp] " + VERSION + " — 127.0.0.1:" + (running == null ? "?" : running.port())
+                + " — " + DISPATCHER.catalog().size() + " methods"
+                + " | player " + playerName() + " | in world " + inWorld();
+    }
+
+    private static void feedback(Component message) {
+        Minecraft client = McmcpMod.mc();
+        if (client == null) return;
+        Compat.clientMessage(client, message);
+        JsonObject data = new JsonObject();
+        data.addProperty("text", message.getString());
+        data.addProperty("kind", "client");
+        EVENTS.add("chat", data);
+    }
+
+    /** Stops the control server (also used by /mcmcp stop). */
+    public static void stopServer() {
+        if (instance != null) instance.shutdown();
     }
 
     private void detectScreen(Minecraft client) {
-        Screen screen = client.screen;
+        Screen screen = Compat.screen(client);
         if (!screenKnown || screen != lastScreen) {
             screenKnown = true;
             lastScreen = screen;
@@ -199,7 +202,7 @@ public class McmcpMod implements ClientModInitializer {
     public static String playerName() {
         Minecraft client = Minecraft.getInstance();
         if (client == null) return null;
-        if (client.player != null) return client.player.getGameProfile().name();
+        if (client.player != null) return Compat.profileName(client.player);
         if (client.getUser() != null) return client.getUser().getName();
         return null;
     }
@@ -214,7 +217,7 @@ public class McmcpMod implements ClientModInitializer {
     }
 
     public static String mcVersion() {
-        return SharedConstants.getCurrentVersion().name();
+        return Compat.mcVersion();
     }
 
     public static String loaderVersion() {
@@ -243,7 +246,7 @@ public class McmcpMod implements ClientModInitializer {
     public static String dimensionName() {
         Minecraft client = Minecraft.getInstance();
         if (client == null || client.level == null) return null;
-        return client.level.dimension().identifier().toString();
+        return Compat.dimensionId(client.level);
     }
 
     public static java.util.List<JsonObject> chatHistory() {

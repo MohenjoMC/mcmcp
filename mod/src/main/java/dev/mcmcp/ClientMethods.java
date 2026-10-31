@@ -4,11 +4,11 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.mojang.blaze3d.platform.InputConstants;
+import dev.mcmcp.compat.Compat;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.OptionInstance;
 import net.minecraft.client.Options;
-import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.ConnectScreen;
 import net.minecraft.client.multiplayer.ServerData;
 import net.minecraft.client.multiplayer.resolver.ServerAddress;
@@ -92,7 +92,7 @@ public final class ClientMethods {
                             field.set(client.options, next);
                         }
                         client.options.save();
-                        if (key.equals("guiScale")) client.resizeGui();
+                        if (key.equals("guiScale")) Compat.resizeGui(client);
                     } catch (ReflectiveOperationException e) {
                         throw new McmcpException(-32100, "could not set " + key + ": " + e.getMessage());
                     }
@@ -125,7 +125,7 @@ public final class ClientMethods {
                 params -> {
                     KeyMapping mapping = findKeybind(Args.requireString(params, "action"));
                     int holdMs = Math.max(0, Args.integer(params, "holdMs", 50));
-                    InputConstants.Key key = PlayerMethods.keyOf(mapping);
+                    InputConstants.Key key = Compat.keyOf(mapping);
                     if (key == InputConstants.UNKNOWN) throw Args.state("the action " + mapping.getName() + " is unbound");
                     Inputs.key(key, InputConstants.PRESS, 0);
                     int ticks = Math.max(1, (holdMs + 49) / 50);
@@ -137,7 +137,7 @@ public final class ClientMethods {
                 Dispatcher.params("action", Dispatcher.param("string", true, "translation key")),
                 params -> {
                     KeyMapping mapping = findKeybind(Args.requireString(params, "action"));
-                    Inputs.key(PlayerMethods.keyOf(mapping), InputConstants.RELEASE, 0);
+                    Inputs.key(Compat.keyOf(mapping), InputConstants.RELEASE, 0);
                     return Json.object("action", mapping.getName(), "held", false);
                 });
 
@@ -151,7 +151,7 @@ public final class ClientMethods {
                     String address = Args.requireString(params, "address");
                     Minecraft client = Game.client();
                     var parsed = ServerAddress.parseString(address);
-                    ConnectScreen.startConnecting(client.screen, client, parsed,
+                    ConnectScreen.startConnecting(Compat.screen(client), client, parsed,
                             new ServerData(address, address, ServerData.Type.OTHER), false, null);
                     return Json.object("connecting", true, "address", parsed.toString());
                 });
@@ -263,7 +263,7 @@ public final class ClientMethods {
             json.addProperty("name", mapping.getTranslatedKeyMessage().getString());
             json.addProperty("defaultKey", mapping.getDefaultKey().getName());
             json.addProperty("unbound", mapping.isUnbound());
-            json.addProperty("category", mapping.getCategory().id().toString());
+            json.addProperty("category", Compat.keybindCategory(mapping));
             array.add(json);
         }
         return array;
@@ -294,24 +294,12 @@ public final class ClientMethods {
 
     private static CompletableFuture<JsonObject> screenshot(String name) {
         Minecraft client = Game.client();
-        CompletableFuture<JsonObject> future = new CompletableFuture<>();
         File dir = new File(client.gameDirectory, "screenshots");
         File target = new File(dir, (name == null || name.isBlank() ? "mcmcp-" + System.currentTimeMillis() : name) + ".png");
-        Screenshot.takeScreenshot(client.getMainRenderTarget(), image -> {
-            try {
-                File parent = target.getParentFile();
-                if (parent != null) parent.mkdirs();
-                image.writeToFile(target);
-                future.complete(Json.object(
+        return Compat.screenshot(client, target)
+                .thenApply(size -> Json.object(
                         "path", target.getAbsolutePath(),
-                        "width", image.getWidth(),
-                        "height", image.getHeight()));
-            } catch (Exception e) {
-                future.completeExceptionally(new McmcpException(-32100, "screenshot failed: " + e.getMessage()));
-            } finally {
-                image.close();
-            }
-        });
-        return future;
+                        "width", size[0],
+                        "height", size[1]));
     }
 }

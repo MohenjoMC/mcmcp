@@ -1,0 +1,89 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'mod/**'
+      - '.github/workflows/build.yml'
+  pull_request:
+    paths:
+      - 'mod/**'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  matrix:
+    name: mcmcp ${{ matrix.mc }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - mc: '26.1'
+            api: '0.155.3+26.1.2'
+            dep: '~26.1'
+            java: '25'
+            java_dep: '>=25'
+          - mc: '26.1.1'
+            api: '0.155.3+26.1.2'
+            dep: '~26.1'
+            java: '25'
+            java_dep: '>=25'
+          - mc: '26.1.2'
+            api: '0.155.3+26.1.2'
+            dep: '~26.1'
+            java: '25'
+            java_dep: '>=25'
+          - mc: '26.2'
+            api: '0.161.0+26.2'
+            dep: '~26.2'
+            java: '25'
+            java_dep: '>=25'
+          - mc: '26.3'
+            api: '0.165.0+26.3'
+            dep: '~26.3'
+            java: '25'
+            java_dep: '>=25'
+          - mc: '1.21.11'
+            api: '0.141.6+1.21.11'
+            dep: '~1.21.11'
+            java: '21'
+            java_dep: '>=21'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Loom 1.19 itself needs JVM 25; the mod's bytecode target is set per version
+      # with --release, so a single build JVM covers the whole matrix.
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build ${{ matrix.mc }}
+        working-directory: mod
+        run: |
+          ./gradlew build --console=plain --stacktrace \
+            -Pminecraft_version='${{ matrix.mc }}' \
+            -Pfabric_api_version='${{ matrix.api }}' \
+            -Pminecraft_dependency='${{ matrix.dep }}' \
+            -Pjava_version='${{ matrix.java }}' \
+            -Pjava_dependency='${{ matrix.java_dep }}'
+
+      - name: Upload jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcmcp-${{ matrix.mc }}
+          path: |
+            mod/build/libs/mcmcp-*+${{ matrix.mc }}.jar
+            mod/build/libs/mcmcp-*+${{ matrix.mc }}-sources.jar
+          if-no-files-found: error

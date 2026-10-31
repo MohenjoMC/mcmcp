@@ -2,9 +2,9 @@ package dev.mcmcp;
 
 import com.google.gson.JsonObject;
 import com.mojang.blaze3d.platform.InputConstants;
+import dev.mcmcp.compat.Compat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 
 /** Raw keyboard, mouse, camera and text input. */
 public final class InputMethods {
@@ -82,7 +82,7 @@ public final class InputMethods {
                         "dy", Dispatcher.param("number", false, "vertical delta")),
                 params -> {
                     LocalPlayer player = Game.player();
-                    double sensitivity = Game.client().options.sensitivity().get();
+                    double sensitivity = Compat.sensitivity(Game.client());
                     double factor = sensitivity * 0.6 + 0.2;
                     double scale = factor * factor * factor * 8.0 * 0.15;
                     float yaw = player.getYRot() + (float) (Args.number(params, "dx", 0) * scale);
@@ -121,11 +121,7 @@ public final class InputMethods {
 
     static JsonObject applyLook(LocalPlayer player, float yaw, float pitch) {
         pitch = Math.max(-90.0f, Math.min(90.0f, pitch));
-        player.setYRot(yaw);
-        player.setXRot(pitch);
-        if (player.connection != null) {
-            player.connection.send(new ServerboundMovePlayerPacket.Rot(yaw, pitch, player.onGround(), false));
-        }
+        Compat.sendLook(player, yaw, pitch);
         return Json.object("yaw", Game.round(yaw), "pitch", Game.round(pitch));
     }
 

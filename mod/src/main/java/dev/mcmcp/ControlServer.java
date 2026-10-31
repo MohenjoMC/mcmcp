@@ -5,7 +5,6 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
-import net.minecraft.SharedConstants;
 import org.slf4j.Logger;
 
 import java.io.IOException;
@@ -108,7 +107,7 @@ public final class ControlServer {
                 "ok", true,
                 "name", "mcmcp",
                 "version", McmcpMod.VERSION,
-                "mc", SharedConstants.getCurrentVersion().name(),
+                "mc", dev.mcmcp.compat.Compat.mcVersion(),
                 "player", McmcpMod.playerName(),
                 "inWorld", McmcpMod.inWorld(),
                 "uptimeMs", McmcpMod.uptimeMs());

@@ -26,7 +26,7 @@ public final class StatusMethods {
                     out.add("player", player);
 
                     out.addProperty("inWorld", client.player != null && client.level != null);
-                    out.add("screen", Game.screenJson(client.screen));
+                    out.add("screen", Game.screenJson(dev.mcmcp.compat.Compat.screen(client)));
                     out.addProperty("fps", client.getFps());
                     out.addProperty("ping", ping(client));
                     out.addProperty("uptimeMs", McmcpMod.uptimeMs());
@@ -45,7 +45,7 @@ public final class StatusMethods {
                     out.addProperty("guiWidth", client.getWindow().getGuiScaledWidth());
                     out.addProperty("guiHeight", client.getWindow().getGuiScaledHeight());
                     out.addProperty("guiScale", client.getWindow().getGuiScale());
-                    out.addProperty("fullscreen", client.getWindow().isFullscreen());
+                    out.addProperty("fullscreen", dev.mcmcp.compat.Compat.isFullscreen(client));
                     out.addProperty("focused", true);
                     return out;
                 });

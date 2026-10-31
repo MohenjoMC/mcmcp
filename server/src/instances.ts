@@ -468,6 +468,95 @@ export function findBuiltJar(startDir = process.cwd()): string | null {
   return null;
 }
 
+/** Every built mod jar, newest first (excludes -sources). */
+export function findBuiltJars(startDir = process.cwd()): string[] {
+  const fromEnv = process.env.MCMCP_MOD_JAR?.trim();
+  if (fromEnv) return [path.resolve(expandHome(fromEnv))];
+
+  for (const libs of candidateLibDirs(startDir)) {
+    try {
+      return readdirSync(libs)
+        .filter((name) => name.toLowerCase().endsWith('.jar') && !name.endsWith('-sources.jar'))
+        .map((name) => {
+          const full = path.join(libs, name);
+          let mtime = 0;
+          try {
+            mtime = statSync(full).mtimeMs;
+          } catch {
+            /* ignore */
+          }
+          return { file: full, mtime };
+        })
+        .sort((a, b) => b.mtime - a.mtime)
+        .map((entry) => entry.file);
+    } catch {
+      continue;
+    }
+  }
+  return [];
+}
+
+function candidateLibDirs(startDir: string): string[] {
+  const candidates: string[] = [];
+  let dir = path.resolve(startDir);
+  for (let depth = 0; depth < 4; depth += 1) {
+    const libs = path.join(dir, 'mod', 'build', 'libs');
+    if (isDirectory(libs)) {
+      candidates.push(libs);
+      break;
+    }
+    if (path.basename(dir) === 'mod' && isDirectory(path.join(dir, 'build', 'libs'))) {
+      candidates.push(path.join(dir, 'build', 'libs'));
+      break;
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  return candidates;
+}
+
+/** The newest jar whose declared Minecraft range accepts this instance. */
+export function jarForInstance(jars: string[], mcVersion: string | null): string | null {
+  if (!mcVersion) return jars[0] ?? null;
+  for (const jar of jars) {
+    if (minecraftSatisfies(mcVersion, jarMinecraftDependency(jar))) return jar;
+  }
+  return null;
+}
+
+export interface SmartInstallOutcome extends InstallOutcome {
+  jar?: string;
+}
+
+/**
+ * Install the matching jar into each instance: one build per Minecraft line means a
+ * mixed launcher gets 26.1.2 into its 26.1.2 instances and 1.21.11 into the 1.21.11 ones.
+ */
+export function installMatching(
+  instances: Instance[],
+  jars: string[],
+  opts: { strict?: boolean; force?: boolean; explicitJar?: string } = {},
+): SmartInstallOutcome[] {
+  const outcomes: SmartInstallOutcome[] = [];
+  for (const instance of instances) {
+    const jar = opts.explicitJar ?? jarForInstance(jars, instance.mcVersion);
+    if (!jar) {
+      outcomes.push({
+        instance,
+        action: 'skipped',
+        removed: [],
+        reason: `no built jar for minecraft ${instance.mcVersion ?? 'unknown'} (build the matrix entry first)`,
+      });
+      continue;
+    }
+    for (const outcome of installMod([instance], jar, { strict: opts.strict, force: opts.force })) {
+      outcomes.push({ ...outcome, jar });
+    }
+  }
+  return outcomes;
+}
+
 /** Read `depends.minecraft` from the jar's fabric.mod.json, e.g. "~26.1". */
 export function jarMinecraftDependency(jar: string): string | null {
   try {

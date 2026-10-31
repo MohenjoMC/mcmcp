@@ -95,19 +95,48 @@ are driven.
 
 ## Version support
 
-Minecraft 26.x ships **unobfuscated**: no mappings, no remapping, plain `implementation`
-dependencies in loom 1.19. The build defaults to 26.1.2 and every version-dependent name
-is confined to the method classes, so a port is a compile-and-fix loop:
+Six targets from one tree:
 
-```sh
-./gradlew build -Pminecraft_version=26.2 -Pfabric_api_version=0.161.0+26.2 \
-  -Pminecraft_dependency='~26.2'
-```
+| target | build | compat family |
+| --- | --- | --- |
+| 26.1, 26.1.1, 26.1.2 | `fabric-loom` (unobfuscated), Java 25 | `src/versions/26` |
+| 26.2, 26.3 | same, Java 25 | `src/versions/26` |
+| 1.21.11 | `fabric-loom-remap` + `loom.officialMojangMappings()`, Java 21 | `src/versions/12111` |
 
-1.21.11 and older are obfuscated and would need `fabric-loom-remap` plus Yarn/official
-mappings, and several names this code uses (`Identifier` vs `ResourceLocation`,
-`KeyEvent` records, `getOverworldClockTime`, `GameProfile#name`) do not exist there. The
-1.21.x port is a separate branch, not a flag.
+`build.gradle` picks the loom plugin from the version prefix, adds
+`src/versions/<family>/java` to the main source set, and compiles with
+`--release <java_version>`; the whole matrix therefore runs on one JVM 25 (loom itself
+refuses to run on 21), while 1.21.11 still gets Java 21 bytecode.
+
+Only two things are version-specific:
+
+1. **`dev.mcmcp.compat.Compat`** — every call that moved between releases: the current
+   screen, `setScreen`, the chat component, the main render target, raw key/mouse events,
+   widget/screen clicks, key-binding category and key value, the options screen, client
+   message injection, GUI resize, look packets, item dropping and the day-time clock.
+2. **Mixins** — `KeyboardHandler`/`MouseHandler` invoke signatures differ (event records
+   in 26.x and 1.21.11, raw key/scancode/action in older lines), so the accessors live in
+   the version source set.
+
+The 26.x family covers three API steps with reflection instead of three source copies:
+screens moved from `Minecraft.screen` to `Gui.screen()`, chat from `Gui.getChat()` to
+`Gui.hud.getChat()`, the render target from `Minecraft.getMainRenderTarget()` to
+`GameRenderer.mainRenderTarget()`, `OptionsScreen` gained and lost a boolean,
+`drop(boolean)` became `drop(ItemStack, boolean, boolean)` then
+`drop(ItemStack, boolean, Prediction)`, and `Window.isFullscreen()` disappeared. Each is
+resolved once, lazily, with a fallback that still works if a name changes again.
+
+1.21.11 is obfuscated, so it gets the remapping plugin and Mojang mappings; its class
+names are the same as 26.x (`Identifier`, `name()`, `identifier()`), which keeps its
+Compat implementation a small delta from the modern one, plus the 1.21 command helpers
+(`ClientCommandManager`) and chat/render-resize names.
+
+Client commands are dispatched through Fabric's internal
+`ClientCommandInternals#executeCommand`, accessed reflectively, so the mod does not have
+to implement `FabricClientCommandSource` (whose abstract methods differ across versions).
+
+Adding a target (say 26.4) means adding a matrix row and, if an accessor moved, a
+fallback in `Compat`.
 
 ## Adding a method
 

@@ -14,6 +14,8 @@ import {
   readInstanceLog,
   uninstallMod,
   type InstanceRoot,
+  jarForInstance,
+  minecraftSatisfies,
 } from './instances.js';
 import { McmcpError } from './protocol.js';
 
@@ -241,5 +243,36 @@ describe('instance discovery', () => {
     const fabric = findInstance('FabricTest', { roots: tree.roots });
     write(path.join(fabric.modsDir, 'sodium.jar'), 'x');
     assert.deepEqual(findModJars(fabric.modsDir), ['mcmcp-0.9.0.jar']);
+  });
+});
+
+describe('version matching', () => {
+  it('understands the dependency syntax Fabric mods use', () => {
+    assert.equal(minecraftSatisfies('26.1.2', '~26.1'), true);
+    assert.equal(minecraftSatisfies('26.1', '~26.1'), true);
+    assert.equal(minecraftSatisfies('26.2', '~26.1'), false);
+    assert.equal(minecraftSatisfies('26.3', '~26.2'), false);
+    assert.equal(minecraftSatisfies('1.21.11', '~1.21.11'), true);
+    assert.equal(minecraftSatisfies('1.21.11', '>=1.21'), true);
+    assert.equal(minecraftSatisfies('26.2', '*'), true);
+    assert.equal(minecraftSatisfies('26.1.2', null), true);
+  });
+
+  it('picks the jar built for the instance', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'mcmcp-jars-'));
+    try {
+      const names = ['mcmcp-1.0.0+26.1.2.jar', 'mcmcp-1.0.0+26.2.jar', 'mcmcp-1.0.0+1.21.11.jar'];
+      const jars = names.map((name) => {
+        const file = path.join(dir, name);
+        writeFileSync(file, '');
+        return file;
+      });
+      assert.equal(path.basename(jarForInstance(jars, '26.1.1') ?? ''), 'mcmcp-1.0.0+26.1.2.jar');
+      assert.equal(path.basename(jarForInstance(jars, '26.2') ?? ''), 'mcmcp-1.0.0+26.2.jar');
+      assert.equal(path.basename(jarForInstance(jars, '1.21.11') ?? ''), 'mcmcp-1.0.0+1.21.11.jar');
+      assert.equal(jarForInstance(jars, '1.20.1'), null);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

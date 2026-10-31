@@ -3,6 +3,7 @@ package dev.mcmcp;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.mojang.blaze3d.platform.InputConstants;
+import dev.mcmcp.compat.Compat;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
@@ -213,7 +214,6 @@ public final class PlayerMethods {
                         InputMethods.applyLook(player, rotation.y, rotation.x);
                         if (client.gameMode == null) throw Args.state("no game mode (not in a world)");
                         client.gameMode.attack(player, entity);
-                        player.swing(InteractionHand.MAIN_HAND);
                         return Json.object("attacked", true, "entityId", entity.getId());
                     }
                     InputConstants.Key key = keyOf(client.options.keyAttack);
@@ -274,7 +274,7 @@ public final class PlayerMethods {
                 params -> {
                     LocalPlayer player = Game.player();
                     boolean all = Args.bool(params, "all", false);
-                    player.drop(all);
+                    Compat.drop(player, all);
                     return Json.object("dropped", true, "all", all);
                 });
 
