@@ -79,19 +79,30 @@ Both forms write the same server entry; the project form writes `./opencode.json
 
 ## Version support
 
-The mod compiles and runs against **26.1.2**; the jar declares `minecraft: ~26.1`, and
-`mcmcp install --all` skips instances whose version does not match instead of breaking
-them. Ports:
+One source tree, six builds. `mcmcp install` reads the jar's declared Minecraft
+dependency and only places it in matching instances, so a mixed launcher stays coherent.
 
-- **26.2** — screen state moved from `Minecraft.screen/setScreen` to `Gui.screen()/setScreen()`,
-  `Gui#getChat` and `Minecraft#getMainRenderTarget` were removed, and Fabric's
-  `FabricClientCommandSource` gained `attended()`. That is a compat layer, not a flag.
-- **1.21.11 and earlier** — obfuscated, so the build needs `fabric-loom-remap` and Yarn
-  mappings, and several names used here (`Identifier` vs `ResourceLocation`, key/mouse
-  event records, `getOverworldClockTime`, `GameProfile#name`) do not exist.
+| Minecraft | Fabric API | Java | Notes |
+| --- | --- | --- | --- |
+| 26.1 / 26.1.1 / 26.1.2 | 0.155.3+26.1.2 | 25 | default target |
+| 26.2 | 0.161.0+26.2 | 25 | screens/chat/render target moved to `Gui` and `GameRenderer` |
+| 26.3 | 0.165.0+26.3 | 25 | `drop` gained `Prediction`, `OptionsScreen` lost its boolean |
+| 1.21.11 | 0.141.6+1.21.11 | 21 | obfuscated: loom-remap + Mojang mappings |
 
-`docs/ARCHITECTURE.md#version-support` has the details and the build command for a
-matrix entry.
+```sh
+cd mod
+./gradlew build                                   # 26.1.2
+./gradlew build -Pminecraft_version=26.3 -Pfabric_api_version=0.165.0+26.3 \
+                -Pminecraft_dependency='~26.3'     # any matrix entry
+./gradlew build -Pminecraft_version=1.21.11 -Pfabric_api_version=0.141.6+1.21.11 \
+                -Pminecraft_dependency='~1.21.11' -Pjava_version=21 -Pjava_dependency='>=21'
+```
+
+Everything version-dependent lives behind `dev.mcmcp.compat.Compat` with one
+implementation per API family (`src/versions/26`, `src/versions/12111`); the 26.x
+implementation resolves the intra-line moves reflectively, so one file covers 26.1–26.3.
+GitHub Actions builds the whole matrix on every push:
+[.github/workflows/build.yml](.github/workflows/build.yml).
 
 ## CLI
 

@@ -1,10 +1,25 @@
 plugins {
-    id 'net.fabricmc.fabric-loom' version '1.19-SNAPSHOT'
+    // 26.x ships unobfuscated (no remapping); 1.21.x needs the remapping plugin and mappings.
+    id 'net.fabricmc.fabric-loom' version '1.19-SNAPSHOT' apply false
+    id 'net.fabricmc.fabric-loom-remap' version '1.19-SNAPSHOT' apply false
     id 'maven-publish'
     id 'java'
 }
 
-version = "${project.mod_version}+${project.minecraft_version}"
+def mcVersion = project.minecraft_version
+def modern = mcVersion.startsWith('26.')
+def javaVersion = (project.findProperty('java_version') ?: (modern ? '25' : '21')).toString().toInteger()
+
+// The API family decides which compat implementation and mixins get compiled.
+def family = project.findProperty('compat_family') ?: (modern ? '26' : '12111')
+
+if (modern) {
+    apply plugin: 'net.fabricmc.fabric-loom'
+} else {
+    apply plugin: 'net.fabricmc.fabric-loom-remap'
+}
+
+version = "${project.mod_version}+${mcVersion}"
 group = project.maven_group
 
 base {
@@ -17,10 +32,24 @@ repositories {
 }
 
 dependencies {
-    // 26.x ships unobfuscated: no mappings, no remapping, plain configurations.
-    minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
-    implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+    minecraft "com.mojang:minecraft:${mcVersion}"
+    if (modern) {
+        // Unobfuscated: plain configurations, no mappings, no remapping.
+        implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+        implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+    } else {
+        mappings loom.officialMojangMappings()
+        modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
+        modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+    }
+}
+
+sourceSets {
+    main {
+        java {
+            srcDir "src/versions/${family}/java"
+        }
+    }
 }
 
 processResources {
@@ -37,14 +66,12 @@ processResources {
 
 java {
     withSourcesJar()
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(25)
-    }
 }
 
+// One JVM (25) builds every target; --release keeps the bytecode valid for 1.21.x.
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
-    options.release = 25
+    options.release = javaVersion
 }
 
 jar {

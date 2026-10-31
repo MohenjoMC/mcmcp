@@ -10,6 +10,8 @@ import { z } from 'zod';
 import { resolveClient, type ResolvedClient } from './config.js';
 import {
   findBuiltJar,
+  findBuiltJars,
+  installMatching,
   findInstance,
   installMod,
   listInstances,
@@ -905,16 +907,17 @@ export const TOOL_DEFS: ToolDef[] = [
       }
 
       if (action === 'install') {
-        const jar = str(args, 'jar') ?? findBuiltJar();
-        if (!jar) {
+        const explicitJar = str(args, 'jar');
+        const jars = explicitJar ? [explicitJar] : findBuiltJars(process.cwd());
+        if (jars.length === 0) {
           throw new McmcpError(
             -32000,
             'no built mod jar found. Build it (cd mod && ./gradlew build) or pass "jar", or set MCMCP_MOD_JAR.',
           );
         }
         const targets = all ? instances : [findInstance(instanceId ?? '')];
-        const outcomes = installMod(targets, jar, { strict: !all, force: bool(args, 'force') });
-        return { jar, outcomes };
+        const outcomes = installMatching(targets, jars, { strict: !all, force: bool(args, 'force'), explicitJar });
+        return { jars, outcomes };
       }
 
       if (action === 'uninstall') {

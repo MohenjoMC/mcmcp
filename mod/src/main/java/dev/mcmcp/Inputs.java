@@ -1,13 +1,9 @@
 package dev.mcmcp;
 
 import com.mojang.blaze3d.platform.InputConstants;
-import dev.mcmcp.mixin.KeyboardHandlerAccessor;
-import dev.mcmcp.mixin.MouseHandlerAccessor;
-import net.minecraft.client.Minecraft;
+import dev.mcmcp.compat.Compat;
 import net.minecraft.client.KeyMapping;
-import net.minecraft.client.input.CharacterEvent;
-import net.minecraft.client.input.KeyEvent;
-import net.minecraft.client.input.MouseButtonInfo;
+import net.minecraft.client.Minecraft;
 import net.minecraft.world.phys.Vec2;
 
 import java.util.Locale;
@@ -93,46 +89,34 @@ public final class Inputs {
 
     public static void key(InputConstants.Key key, int action, int modifiers) {
         if (key == null || key == InputConstants.UNKNOWN) throw Args.invalid("key", "is not a known key name");
-        Minecraft client = requireClient();
-        long window = client.getWindow().handle();
-        KeyboardHandlerAccessor keyboard = (KeyboardHandlerAccessor) client.keyboardHandler;
-        keyboard.mcmcp$keyPress(window, action, new KeyEvent(key.getValue(), 0, modifiers));
+        Compat.key(requireClient(), key.getValue(), action, modifiers);
     }
 
     public static void mouseMove(double x, double y) {
-        Minecraft client = requireClient();
-        ((MouseHandlerAccessor) client.mouseHandler).mcmcp$onMove(client.getWindow().handle(), x, y);
+        Compat.mouseMove(requireClient(), x, y);
     }
 
     public static void mouseButton(int button, int action, double x, double y, int modifiers) {
         Minecraft client = requireClient();
-        long window = client.getWindow().handle();
-        MouseHandlerAccessor mouse = (MouseHandlerAccessor) client.mouseHandler;
-        if (Double.isFinite(x) && Double.isFinite(y)) mouse.mcmcp$onMove(window, x, y);
-        mouse.mcmcp$onButton(window, new MouseButtonInfo(button, modifiers), action);
+        if (Double.isFinite(x) && Double.isFinite(y)) Compat.mouseMove(client, x, y);
+        Compat.mouseButton(client, button, action, modifiers);
     }
 
     public static void scroll(double dx, double dy) {
-        Minecraft client = requireClient();
-        ((MouseHandlerAccessor) client.mouseHandler).mcmcp$onScroll(client.getWindow().handle(), dx, dy);
+        Compat.scroll(requireClient(), dx, dy);
     }
 
     public static void typeText(String text) {
         Minecraft client = requireClient();
-        long window = client.getWindow().handle();
-        KeyboardHandlerAccessor keyboard = (KeyboardHandlerAccessor) client.keyboardHandler;
-        text.codePoints().forEach(cp -> keyboard.mcmcp$charTyped(window, new CharacterEvent(cp)));
+        text.codePoints().forEach(codepoint -> Compat.typeText(client, codepoint));
     }
 
-    /** Turns a key call into a promise-free down/up pair; callers schedule the release. */
     public static void releaseEverything() {
         KeyMapping.releaseAll();
         Minecraft client = McmcpMod.mc();
         if (client == null) return;
-        long window = client.getWindow().handle();
-        MouseHandlerAccessor mouse = (MouseHandlerAccessor) client.mouseHandler;
         for (int button = 0; button < 3; button++) {
-            mouse.mcmcp$onButton(window, new MouseButtonInfo(button, 0), InputConstants.RELEASE);
+            Compat.mouseButton(client, button, InputConstants.RELEASE, 0);
         }
     }
 

@@ -2,20 +2,16 @@ package dev.mcmcp;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
+import dev.mcmcp.compat.Compat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.EditBox;
-import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.PauseScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.advancements.AdvancementsScreen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
-import net.minecraft.client.gui.screens.options.OptionsScreen;
 import net.minecraft.client.gui.screens.social.SocialInteractionsScreen;
-import net.minecraft.client.input.KeyEvent;
-import net.minecraft.client.input.MouseButtonEvent;
-import net.minecraft.client.input.MouseButtonInfo;
 import net.minecraft.client.player.LocalPlayer;
 
 import java.util.Locale;
@@ -28,19 +24,21 @@ public final class GuiMethods {
 
     public static void register(Dispatcher d) {
         d.add("gui.screen", "The open screen: id, title, and every widget with its id, label and bounds.",
-                "{\"id\",\"title\",\"widgets\":[{\"id\",\"type\",\"label\",\"x\",\"y\",\"width\",\"height\",\"active\",\"visible\"}],\"container\"?}",
+                "{\"id\",\"title\",\"widgets\":[{\"id\",\"type\",\"label\",\"x\",\"y\",\"width\",\"height\",\"active\",\"visible\"}],\"lists\"?,\"container\"?}",
                 Dispatcher.empty(), params -> {
-                    Screen screen = McmcpMod.mc().screen;
+                    Minecraft client = McmcpMod.mc();
+                    Screen screen = Compat.screen(client);
                     JsonObject json = new JsonObject();
                     if (screen == null) {
                         json.add("id", com.google.gson.JsonNull.INSTANCE);
                         json.add("title", com.google.gson.JsonNull.INSTANCE);
                         json.add("widgets", new JsonArray());
+                        json.add("lists", new JsonArray());
                         return json;
                     }
                     json = Game.screenJson(screen);
                     json.add("widgets", Game.widgets(screen));
-                    json.add("lists", Game.lists(screen));
+                    json.add("lists", Compat.lists(screen));
                     if (screen instanceof AbstractContainerScreen<?> container) {
                         json.add("items", Game.containerItems(container));
                     }
@@ -69,14 +67,14 @@ public final class GuiMethods {
                     double y;
                     JsonObject clicked = new JsonObject();
                     AbstractWidget widget = null;
-                    net.minecraft.client.gui.components.AbstractSelectionList<?> list = null;
+                    Object list = null;
                     Object entry = null;
 
                     if (Args.has(params, "list") || Args.has(params, "entry")) {
                         int listId = Args.requireInt(params, "list");
                         int entryIndex = Args.requireInt(params, "entry");
-                        list = Game.listById(screen, listId);
-                        entry = entryFor(list, entryIndex);
+                        list = Compat.listById(screen, listId);
+                        entry = Compat.entryFor(list, entryIndex);
                         if (!(entry instanceof net.minecraft.client.gui.layouts.LayoutElement row)) {
                             throw Args.state("that list row has no bounds");
                         }
@@ -86,12 +84,10 @@ public final class GuiMethods {
                         clicked.addProperty("list", listId);
                         clicked.addProperty("entry", entryIndex);
                         JsonArray labels = new JsonArray();
-                        if (entry instanceof net.minecraft.client.gui.layouts.LayoutElement layout) {
-                            layout.visitWidgets(w -> {
-                                String text = w.getMessage().getString();
-                                if (!text.isBlank()) labels.add(text);
-                            });
-                        }
+                        row.visitWidgets(w -> {
+                            String text = w.getMessage().getString();
+                            if (!text.isBlank()) labels.add(text);
+                        });
                         clicked.add("labels", labels);
                     } else if (Args.has(params, "x") && Args.has(params, "y")) {
                         x = Args.requireDouble(params, "x");
@@ -109,25 +105,19 @@ public final class GuiMethods {
                         clicked.addProperty("type", widget.getClass().getSimpleName());
                     }
 
-                    MouseButtonEvent down = new MouseButtonEvent(x, y, new MouseButtonInfo(button, 0));
-                    MouseButtonEvent up = new MouseButtonEvent(x, y, new MouseButtonInfo(button, 0));
                     screen.mouseMoved(x, y);
                     boolean handled;
-                    if (list != null /* row click */) {
-                        // The list owns hit-testing, selection and double-click handling;
-                        // clicking the entry directly never updates the selection.
-                        handled = list.mouseClicked(down, doubleClick);
-                        list.mouseReleased(up);
+                    if (list != null) {
+                        handled = Compat.clickList(list, x, y, button, doubleClick);
+                        Compat.releaseList(list, x, y, button);
                     } else if (widget != null) {
-                        // Click the widget itself: a screen-level dispatch can pick a
-                        // full-size sibling from a layout and swallow the press.
                         screen.setFocused(widget);
                         widget.setFocused(true);
-                        handled = widget.mouseClicked(down, doubleClick);
-                        widget.mouseReleased(up);
+                        handled = Compat.clickWidget(widget, x, y, button, doubleClick);
+                        Compat.releaseWidget(widget, x, y, button);
                     } else {
-                        handled = screen.mouseClicked(down, doubleClick);
-                        screen.mouseReleased(up);
+                        handled = Compat.clickScreen(screen, x, y, button, doubleClick);
+                        Compat.releaseScreen(screen, x, y, button);
                     }
                     clicked.addProperty("x", Game.round(x));
                     clicked.addProperty("y", Game.round(y));
@@ -136,7 +126,7 @@ public final class GuiMethods {
                     return waitTicks(2).thenApply(ignored -> {
                         JsonObject out = new JsonObject();
                         out.add("clicked", clicked);
-                        out.add("screen", Game.screenJson(client.screen));
+                        out.add("screen", Game.screenJson(Compat.screen(client)));
                         return out;
                     });
                 });
@@ -151,7 +141,7 @@ public final class GuiMethods {
                     Screen screen = Game.screen();
                     String label = Args.string(params, "field", null);
                     Integer id = null;
-                    if (label != null && label.matches("\\d+") && Args.has(params, "field")) {
+                    if (label != null && label.matches("\\d+")) {
                         id = Integer.parseInt(label);
                         label = null;
                     }
@@ -175,40 +165,42 @@ public final class GuiMethods {
                     Screen screen = Game.screen();
                     var key = Inputs.parseKey(Args.requireString(params, "key"));
                     String action = Args.string(params, "action", "press").toLowerCase(Locale.ROOT);
-                    KeyEvent event = new KeyEvent(key.getValue(), 0, 0);
                     if (action.equals("up")) {
-                        screen.keyReleased(event);
+                        Compat.keyScreen(screen, key.getValue(), true, 0);
                     } else {
-                        screen.keyPressed(event);
-                        if (action.equals("press")) screen.keyReleased(event);
+                        Compat.keyScreen(screen, key.getValue(), false, 0);
+                        if (action.equals("press")) Compat.keyScreen(screen, key.getValue(), true, 0);
                     }
                     return waitTicks(1).thenApply(ignored -> {
                         JsonObject out = new JsonObject();
-                        out.add("screen", Game.screenJson(McmcpMod.mc().screen));
+                        out.add("screen", Game.screenJson(Compat.screen(McmcpMod.mc())));
                         return out;
                     });
                 });
 
         d.add("gui.open", "Open a vanilla screen by name.", "{\"screen\":{...}}",
                 Dispatcher.params("screen", Dispatcher.param("string", true,
-                        "inventory, chat, pause, options, social, advancements, stats")),
+                        "inventory, chat, pause, options, social, advancements")),
                 params -> {
                     Minecraft client = Game.client();
                     String name = Args.requireString(params, "screen").toLowerCase(Locale.ROOT);
-                    LocalPlayer player = Game.player();
+                    LocalPlayer player = Game.playerOrNull();
+                    if (name.equals("inventory") || name.equals("inv")) {
+                        if (player == null) throw Args.state("no player: join a world first");
+                    }
                     Screen next = switch (name) {
                         case "inventory", "inv" -> new InventoryScreen(player);
-                        case "chat" -> new ChatScreen("", false);
+                        case "chat" -> Compat.chatScreen();
                         case "pause", "menu", "esc" -> new PauseScreen(true);
-                        case "options", "settings" -> new OptionsScreen(client.screen, client.options, client.level != null);
+                        case "options", "settings" -> Compat.optionsScreen(client, Compat.screen(client));
                         case "social", "social_interactions" -> new SocialInteractionsScreen();
                         case "advancements", "advancement" -> new AdvancementsScreen(client.getConnection().getAdvancements());
                         default -> throw Args.invalid("screen", "must be inventory, chat, pause, options, social or advancements");
                     };
-                    client.setScreen(next);
+                    Compat.setScreen(client, next);
                     return waitTicks(2).thenApply(ignored -> {
                         JsonObject out = new JsonObject();
-                        out.add("screen", Game.screenJson(client.screen));
+                        out.add("screen", Game.screenJson(Compat.screen(client)));
                         return out;
                     });
                 });
@@ -216,8 +208,8 @@ public final class GuiMethods {
         d.add("gui.close", "Close the open screen.", "{\"screen\":null}",
                 Dispatcher.empty(), params -> {
                     Minecraft client = Game.client();
-                    if (client.screen == null) return Json.object("screen", null);
-                    client.setScreen(null);
+                    if (Compat.screen(client) == null) return Json.object("screen", null);
+                    Compat.setScreen(client, null);
                     return waitTicks(1).thenApply(ignored -> Json.object("screen", null));
                 });
 
@@ -239,14 +231,14 @@ public final class GuiMethods {
                         if (matches(label, screenId)) {
                             JsonObject out = new JsonObject();
                             out.addProperty("matched", true);
-                            out.add("screen", Game.screenJson(McmcpMod.mc().screen));
+                            out.add("screen", Game.screenJson(Compat.screen(McmcpMod.mc())));
                             future.complete(out);
                             return true;
                         }
                         if (System.currentTimeMillis() > deadline) {
                             future.completeExceptionally(new McmcpException(-32001,
                                     "timed out waiting for " + (screenId != null ? "screen " + screenId : "label '" + label + "'"),
-                                    Json.object("screen", Game.screenJson(McmcpMod.mc().screen))));
+                                    Json.object("screen", Game.screenJson(Compat.screen(McmcpMod.mc())))));
                             return true;
                         }
                         return false;
@@ -256,7 +248,7 @@ public final class GuiMethods {
     }
 
     private static boolean matches(String label, String screenId) {
-        Screen screen = McmcpMod.mc().screen;
+        Screen screen = Compat.screen(McmcpMod.mc());
         if (screenId != null) {
             String id = screen == null ? "" : screen.getClass().getSimpleName().toLowerCase(Locale.ROOT);
             String title = screen == null ? "" : screen.getTitle().getString().toLowerCase(Locale.ROOT);
@@ -280,13 +272,5 @@ public final class GuiMethods {
     private static CompletableFuture<Void> waitTicks(int ticks) {
         return McmcpMod.events().after(ticks, () -> {
         });
-    }
-
-    private static Object entryFor(net.minecraft.client.gui.components.AbstractSelectionList<?> list, int index) {
-        var children = list.children();
-        if (index < 0 || index >= children.size()) {
-            throw Args.invalid("entry", "must be 0.." + (children.size() - 1));
-        }
-        return children.get(index);
     }
 }

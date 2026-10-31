@@ -24,7 +24,7 @@ import {
 } from './config.js';
 import { runDoctor } from './doctor.js';
 import {
-  findBuiltJar,
+  findBuiltJar, findBuiltJars, installMatching,
   findInstance,
   installMod,
   listInstances,
@@ -313,18 +313,24 @@ function cmdInstall(parsed: ParsedArgs): number {
   if (!all && !instanceId) {
     throw new McmcpError(-32602, 'usage: mcmcp install --instance <id> | --all  [--jar <path>]');
   }
-  const jar = flagString(parsed, 'jar') ?? findBuiltJar();
-  if (!jar) {
+  const explicitJar = flagString(parsed, 'jar');
+  const jars = explicitJar ? [path.resolve(explicitJar)] : findBuiltJars();
+  if (jars.length === 0) {
     throw new McmcpError(-32000, 'no built mod jar found. Build it (cd mod && ./gradlew build), pass --jar, or set MCMCP_MOD_JAR.');
   }
   const instances = listInstances();
   const targets = all ? instances : [findInstance(instanceId ?? '')];
-  const outcomes = installMod(targets, jar, { strict: !all, force: flagBool(parsed, 'force') });
+  const outcomes = installMatching(targets, jars, {
+    strict: !all,
+    force: flagBool(parsed, 'force'),
+    explicitJar,
+  });
   if (flagBool(parsed, 'json')) {
-    printJson({ jar, outcomes });
+    printJson({ jars, outcomes });
     return 0;
   }
-  out(`jar: ${jar}`);
+  if (jars.length > 1) out(`jars: ${jars.length} built (${jars.map((j) => path.basename(j)).join(', ')})`);
+  else if (jars[0]) out(`jar: ${jars[0]}`);
   let installed = 0;
   for (const outcome of outcomes) {
     if (outcome.action === 'skipped') {

@@ -10,6 +10,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
+import dev.mcmcp.compat.Compat;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Entity;
@@ -51,7 +52,7 @@ public final class Game {
     }
 
     public static Screen screen() {
-        Screen screen = client().screen;
+        Screen screen = Compat.screen(client());
         if (screen == null) throw Args.state("no screen is open");
         return screen;
     }
@@ -97,56 +98,6 @@ public final class Game {
     }
 
     public record FoundWidget(AbstractWidget widget, int id) {
-    }
-
-    /** Selection lists (worlds, servers, resource packs, …) and their rows. */
-    public static JsonArray lists(Screen screen) {
-        JsonArray out = new JsonArray();
-        if (screen == null) return out;
-        int listIndex = 0;
-        for (GuiEventListener listener : screen.children()) {
-            if (!(listener instanceof net.minecraft.client.gui.components.AbstractSelectionList<?> selected)) continue;
-            @SuppressWarnings("rawtypes")
-            net.minecraft.client.gui.components.AbstractSelectionList list = selected;
-            JsonObject json = new JsonObject();
-            json.addProperty("id", listIndex++);
-            json.addProperty("class", list.getClass().getSimpleName());
-            JsonArray entries = new JsonArray();
-            int index = 0;
-            for (Object raw : list.children()) {
-                if (!(raw instanceof net.minecraft.client.gui.layouts.LayoutElement entry)) continue;
-                JsonObject e = new JsonObject();
-                e.addProperty("index", index++);
-                e.addProperty("x", entry.getX());
-                e.addProperty("y", entry.getY());
-                e.addProperty("width", entry.getWidth());
-                e.addProperty("height", entry.getHeight());
-                JsonArray labels = new JsonArray();
-                entry.visitWidgets(widget -> {
-                    String text = widget.getMessage().getString();
-                    if (!text.isBlank()) labels.add(text);
-                });
-                e.add("labels", labels);
-                String narration = narration(raw);
-                if (narration != null) e.addProperty("narration", narration);
-                e.addProperty("selected", list.getSelected() == raw);
-                entries.add(e);
-            }
-            json.add("entries", entries);
-            out.add(json);
-        }
-        return out;
-    }
-
-    @SuppressWarnings("rawtypes")
-    public static net.minecraft.client.gui.components.AbstractSelectionList listById(Screen screen, int id) {
-        int index = 0;
-        for (GuiEventListener listener : screen.children()) {
-            if (listener instanceof net.minecraft.client.gui.components.AbstractSelectionList list) {
-                if (index++ == id) return list;
-            }
-        }
-        throw Args.state("no selection list with id " + id);
     }
 
     public static FoundWidget findWidget(Screen screen, String label, Integer id) {
@@ -241,7 +192,7 @@ public final class Game {
 
     public static JsonObject playerState(LocalPlayer player) {
         JsonObject json = new JsonObject();
-        json.addProperty("name", player.getGameProfile().name());
+        json.addProperty("name", Compat.profileName(player));
         json.addProperty("uuid", player.getUUID().toString());
         json.add("position", position(player));
         Vec3 velocity = player.getDeltaMovement();
@@ -261,7 +212,7 @@ public final class Game {
         json.add("xp", xp);
         var gameMode = client().gameMode;
         json.addProperty("gameMode", gameMode == null ? "unknown" : gameMode.getPlayerMode().getName());
-        json.addProperty("dimension", player.level().dimension().identifier().toString());
+        json.addProperty("dimension", Compat.dimensionId(player.level()));
         json.addProperty("selectedSlot", player.getInventory().getSelectedSlot());
         JsonObject selected = new JsonObject();
         selected.addProperty("id", BuiltInRegistries.ITEM.getKey(player.getInventory().getSelectedItem().getItem()).toString());
@@ -312,20 +263,5 @@ public final class Game {
             array.add(json);
         }
         return array;
-    }
-
-    /** World/server/pack rows draw text instead of exposing widgets; ask for their narration. */
-    private static String narration(Object entry) {
-        for (String name : new String[]{"getNarrationMessage", "getWorldName", "getServerName"}) {
-            try {
-                var method = entry.getClass().getMethod(name);
-                Object value = method.invoke(entry);
-                if (value instanceof net.minecraft.network.chat.Component component) return component.getString();
-                if (value instanceof String text) return text;
-            } catch (ReflectiveOperationException ignored) {
-                // try the next name
-            }
-        }
-        return null;
     }
 }
