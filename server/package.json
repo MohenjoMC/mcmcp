@@ -1,0 +1,33 @@
+{
+  "name": "mcmcp",
+  "version": "1.0.0",
+  "description": "MCP server and CLI that controls a live Minecraft Java client: settings, screens, input, chat, commands and world state.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "mcmcp": "dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "files": [
+    "dist",
+    "!dist/**/*.test.js",
+    "!dist/testutil.js"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "test": "npm run build && node --test dist/**/*.test.js",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.3"
+  }
+}

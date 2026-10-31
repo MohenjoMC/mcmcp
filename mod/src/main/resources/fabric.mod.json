@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "id": "mcmcp",
+  "version": "${version}",
+  "name": "mcmcp",
+  "description": "Local control surface for the Minecraft client. Exposes settings, screens, input, chat, commands and world state over a token-protected HTTP endpoint so an MCP server or the mcmcp CLI can drive the game.",
+  "authors": [
+    "mcmcp"
+  ],
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "dev.mcmcp.McmcpMod"
+    ]
+  },
+  "mixins": [
+    {
+      "config": "mcmcp.mixins.json",
+      "environment": "client"
+    }
+  ],
+  "depends": {
+    "fabricloader": ">=0.18.4",
+    "minecraft": "${minecraft_dependency}",
+    "java": "${java_dependency}",
+    "fabric-api": "*"
+  }
+}

@@ -1,0 +1,19 @@
+# Build output
+mod/build/
+mod/.gradle/
+mod/run/
+mod/logs/
+server/dist/
+server/node_modules/
+*.class
+*.jar
+!mod/gradle/wrapper/gradle-wrapper.jar
+
+# Local state
+.mcmcp/
+*.log
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store

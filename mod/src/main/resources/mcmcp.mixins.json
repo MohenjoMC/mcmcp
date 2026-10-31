@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.mcmcp.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "KeyboardHandlerAccessor",
+    "MouseHandlerAccessor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

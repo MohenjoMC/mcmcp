@@ -1,0 +1,54 @@
+plugins {
+    id 'net.fabricmc.fabric-loom' version '1.19-SNAPSHOT'
+    id 'maven-publish'
+    id 'java'
+}
+
+version = "${project.mod_version}+${project.minecraft_version}"
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+repositories {
+    mavenCentral()
+    maven { name = 'Fabric'; url = 'https://maven.fabricmc.net/' }
+}
+
+dependencies {
+    // 26.x ships unobfuscated: no mappings, no remapping, plain configurations.
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    implementation "net.fabricmc:fabric-loader:${project.loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+}
+
+processResources {
+    inputs.property 'version', project.version
+    inputs.property 'minecraft_dependency', project.minecraft_dependency
+    inputs.property 'java_dependency', project.java_dependency
+
+    filesMatching('fabric.mod.json') {
+        expand version: project.version,
+               minecraft_dependency: project.minecraft_dependency,
+               java_dependency: project.java_dependency
+    }
+}
+
+java {
+    withSourcesJar()
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 25
+}
+
+jar {
+    from('LICENSE') {
+        rename { "${it}_${project.base.archivesName.get()}" }
+    }
+}
