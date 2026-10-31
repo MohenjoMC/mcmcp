@@ -139,7 +139,7 @@ export async function launchInstance(id: string, opts: LaunchOptions = {}): Prom
  * Prism is often distributed as an AppImage: look on PATH first, then in the
  * usual download folders, then an explicit MCMCP_PRISM override wins.
  */
-function findPrismBinary(): string | null {
+export function findPrismBinary(): string | null {
   const override = process.env.MCMCP_PRISM;
   if (override && pathExists(override)) return override;
   const onPath = findOnPath(PRISM_BINARIES);

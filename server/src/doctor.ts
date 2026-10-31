@@ -8,6 +8,7 @@ import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { readDescriptors, configDir, configPath, defaultTokenPath, ensureToken, loadConfig, tokenPermissions } from './config.js';
 import { findBuiltJar, jarMinecraftDependency, listInstances, minecraftSatisfies } from './instances.js';
+import { findPrismBinary } from './launcher.js';
 import { status as opencodeStatus, SERVER_COMMAND } from './opencode.js';
 import { McmcpError, ModClient } from './protocol.js';
 import { formatDuration, isCommandOnPath, pathExists } from './util.js';
@@ -200,6 +201,20 @@ export async function runDoctor(opts: { projectDir?: string } = {}): Promise<Doc
       .filter(Boolean)
       .join('; ');
     checks.push({ status: missing.length === 0 && withMod.length > 0 ? 'PASS' : 'WARN', label: 'instances', detail });
+  }
+
+  // Launcher (only relevant when Prism instances exist).
+  if (instances.some((instance) => instance.launcher === 'prism')) {
+    const prism = findPrismBinary();
+    checks.push(
+      prism
+        ? { status: 'PASS', label: 'launcher', detail: `prism ${prism}` }
+        : {
+            status: 'WARN',
+            label: 'launcher',
+            detail: 'PrismLauncher not found; "mcmcp launch" will not work (set MCMCP_PRISM)',
+          },
+    );
   }
 
   // Built jar.
