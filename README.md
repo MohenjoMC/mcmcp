@@ -179,6 +179,21 @@ mcmcp call client.screenshot '{"name":"base"}'
 - `mcmcp` never sends your session credentials anywhere; it only speaks to the client on
   loopback.
 
+## Development
+
+```sh
+cd server && npm test              # 63 unit tests, no game needed
+node scripts/smoke.mjs             # MCP over stdio against a live client
+cd ../mod && ./gradlew build       # 26.1.2 jar
+./gradlew build -Pminecraft_version=26.2 -Pfabric_api_version=0.161.0+26.2 \
+                -Pminecraft_dependency='~26.2'   # matrix entry
+mcmcp doctor                       # everything at once
+```
+
+The mod's method catalog is generated from the registrations, so `mcmcp methods` and
+`GET /methods` always match the code. Handlers run on the client thread; anything that
+waits returns a future driven by `Events.tickFor`, so the game keeps rendering.
+
 ## Layout
 
 ```
