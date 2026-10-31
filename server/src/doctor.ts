@@ -7,7 +7,7 @@ import { createServer as createNetServer } from 'node:net';
 import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { readDescriptors, configDir, configPath, defaultTokenPath, ensureToken, loadConfig, tokenPermissions } from './config.js';
-import { findBuiltJar, jarMinecraftDependency, listInstances, minecraftSatisfies } from './instances.js';
+import { findBuiltJars, jarForInstance, listInstances } from './instances.js';
 import { findPrismBinary } from './launcher.js';
 import { status as opencodeStatus, SERVER_COMMAND } from './opencode.js';
 import { McmcpError, ModClient } from './protocol.js';
@@ -182,25 +182,33 @@ export async function runDoctor(opts: { projectDir?: string } = {}): Promise<Doc
       detail: 'none found (looked in PrismLauncher native/Flatpak and ~/.minecraft)',
     });
   } else {
-    const withMod = instances.filter((i) => i.hasMod);
+    const jars = findBuiltJars(opts.projectDir);
     const fabric = instances.filter((i) => i.fabric);
-    const jar = findBuiltJar(opts.projectDir);
-    const dependency = jar ? jarMinecraftDependency(jar) : null;
-    const compatible = fabric.filter((i) => minecraftSatisfies(i.mcVersion ?? '', dependency));
-    const missing = compatible.filter((i) => !i.hasMod);
-    const otherVersion = fabric.filter((i) => !minecraftSatisfies(i.mcVersion ?? '', dependency));
+    const withMod = instances.filter((i) => i.hasMod);
+    const missing: string[] = [];
+    const stale: string[] = [];
+    const noBuild: string[] = [];
+    for (const instance of fabric) {
+      const jar = jarForInstance(jars, instance.mcVersion ?? null);
+      if (!jar) {
+        noBuild.push(`${instance.id} ${instance.mcVersion ?? '?'}`);
+        continue;
+      }
+      if (!instance.hasMod) missing.push(instance.id);
+      else if (instance.modVersion && !path.basename(jar).includes(instance.modVersion)) stale.push(instance.id);
+    }
     const bad = instances.filter((i) => !i.fabric);
     const detail = [
-      `${instances.length} found, ${fabric.length} Fabric, ${withMod.length} with mcmcp`,
-      missing.length ? `missing in: ${missing.map((i) => i.id).join(', ')}` : '',
-      otherVersion.length
-        ? `needs another build (${dependency ?? 'unknown'} jar): ${otherVersion.map((i) => `${i.id} ${i.mcVersion}`).join(', ')}`
-        : '',
+      `${instances.length} found, ${fabric.length} Fabric, ${withMod.length} with mcmcp, ${jars.length} jar(s) built`,
+      missing.length ? `missing in: ${missing.join(', ')}` : '',
+      stale.length ? `older build installed: ${stale.join(', ')}` : '',
+      noBuild.length ? `no jar built for: ${noBuild.join(', ')}` : '',
       bad.length ? `not Fabric: ${bad.map((i) => `${i.id} (${i.loader})`).join(', ')}` : '',
     ]
       .filter(Boolean)
       .join('; ');
-    checks.push({ status: missing.length === 0 && withMod.length > 0 ? 'PASS' : 'WARN', label: 'instances', detail });
+    const ok = missing.length === 0 && stale.length === 0 && noBuild.length === 0;
+    checks.push({ status: ok && withMod.length > 0 ? 'PASS' : 'WARN', label: 'instances', detail });
   }
 
   // Launcher (only relevant when Prism instances exist).
@@ -217,11 +225,18 @@ export async function runDoctor(opts: { projectDir?: string } = {}): Promise<Doc
     );
   }
 
-  // Built jar.
-  const jar = findBuiltJar(opts.projectDir);
+  // Built jars.
+  const builtJars = findBuiltJars(opts.projectDir);
   checks.push(
-    jar
-      ? { status: 'PASS', label: 'mod jar', detail: jar }
+    builtJars.length > 0
+      ? {
+          status: 'PASS',
+          label: 'mod jar',
+          detail:
+            builtJars.length === 1
+              ? (builtJars[0] as string)
+              : `${builtJars.length} builds: ${builtJars.map((jar) => path.basename(jar)).join(', ')}`,
+        }
       : {
           status: 'WARN',
           label: 'mod jar',
